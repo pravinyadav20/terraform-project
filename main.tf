@@ -96,7 +96,8 @@ resource "aws_instance" "my_ec2" {
 
   subnet_id = aws_subnet.terra_subnet.id
 
-  user_data = file("install_nginx.sh")
+  # Install Docker and Nginx via cloud-init
+  user_data = file("setup_instance.sh")
 
   tags = {
     Name = "Terraform-EC2"
