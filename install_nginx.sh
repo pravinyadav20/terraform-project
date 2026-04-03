@@ -1,5 +1,7 @@
 #!/bin/bash
-sudo apt update -y
-sudo apt install nginx -y
-sudo systemctl start nginx
-sudo systemctl enable nginx
+apt install -y docker.io
+ systemctl start docker
+ systemctl enable docker
+
+docker run -d -p 80:80 ${var.image_name}
+              
