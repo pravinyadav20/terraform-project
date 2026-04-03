@@ -1,0 +1,93 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_DEFAULT_REGION = 'ap-south-1'
+        TERRAFORM_DIR = './'                        // path to Terraform code
+        TERRAFORM_IMAGE = "pravin2012/terraform-app:${BUILD_NUMBER}"
+        SSH_KEY = "terra-key"
+    }
+
+    stages {
+
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/pravinyadav20/terraform-project.git'
+            }
+        }
+
+        stage('Terraform Init & Apply') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws_credential'
+                ]]) {
+                    dir("${TERRAFORM_DIR}") {
+                        sh """
+                            terraform init
+                            terraform plan -var "image_name=${TERRAFORM_IMAGE}"
+                            terraform apply -auto-approve -var "image_name=${TERRAFORM_IMAGE}"
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Output') {
+            steps {
+                dir("${TERRAFORM_DIR}") {
+                    sh 'terraform output'
+                }
+            }
+        }
+
+        stage('Build & Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker_hub_cred',   // Fixed reference here
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                        docker login -u \$DOCKER_USER -p \$DOCKER_PASS
+                        docker build -t ${TERRAFORM_IMAGE} .
+                        docker push ${TERRAFORM_IMAGE}
+                    """
+                }
+            }
+        }
+
+        stage('Prepare SSH Key & Deploy Docker on EC2') {
+            steps {
+                script {
+                    // Ensure correct permissions on the SSH key
+                    sh "chmod 600 ${SSH_KEY}"
+
+                    // Get public IP from Terraform output
+                    def ec2_ip = sh(script: "terraform output -raw public_ip", returnStdout: true).trim()
+                    echo "EC2 Public IP: ${ec2_ip}"
+
+                    // Install Docker and run container on EC2
+                    sh """
+                        ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ubuntu@${ec2_ip} '
+                            sudo apt update
+                            sudo apt install -y docker.io
+                            sudo systemctl enable docker
+                            sudo systemctl start docker
+                            sudo docker run -d -p 80:80 ${TERRAFORM_IMAGE}
+                        '
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Full pipeline executed successfully!'
+        }
+        failure {
+            echo '❌ Pipeline failed. Check the logs!'
+        }
+    }
+}
