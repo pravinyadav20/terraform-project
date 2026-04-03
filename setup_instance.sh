@@ -11,6 +11,8 @@ docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_PASSWORD
 
 # Remove old container if exists
 sudo docker rm -f terraform-app || true
+sudo systemctl stop nginx
+sudo systemctl disable nginx
 
 # Pull and run your image
 docker pull pravinyadav20/terraform-app:latest
