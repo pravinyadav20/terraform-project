@@ -9,7 +9,10 @@ variable "ami_id"  {
  type = string
 
 }
- 
+ variable "image_name" {
+  description = "Docker image"
+  type        = string
+}
 
 
 
